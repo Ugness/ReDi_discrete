@@ -1,0 +1,16 @@
+# image
+image/pretrained_maskgit
+image/results
+image/train
+image/val
+image/VIRTUAL_imagenet256_labeled.npz
+image/fid_stats_imagenet256_guided_diffusion.npz
+image/dataset
+
+# text
+text/checkpoints
+text/outputs
+
+*__pycache__*
+*wandb*
+*.hydra
