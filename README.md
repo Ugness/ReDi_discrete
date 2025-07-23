@@ -3,7 +3,7 @@
 By [Jaehoon Yoo](https://sites.google.com/view/jaehoon-yoo/), [Wonjung Kim](https://github.com/wjhjkim), [Seunghoon Hong](https://maga33.github.io/)
 
 This repository contains the official implementation of the paper:
-[ReDi: Rectified Discrete Flow (Arxiv, 2025)]()
+[ReDi: Rectified Discrete Flow (Arxiv, 2025)](https://arxiv.org/abs/2507.15897)
 
 We introduce *ReDi*, a novel iterative mothod that reduces factorization error by rectifying the coupling between source and target distribution.
 
