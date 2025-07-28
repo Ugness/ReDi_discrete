@@ -17,7 +17,7 @@ In this repo, we integrate [Halton-MaskGIT](https://github.com/valeoai/Halton-Ma
 
 ## Project Structure
       ├ image/                                        <- MaskGIT based ReDi-image code
-      |    ├── Metrics/                               <- evaluation tool
+      |    ├── Metrics/                               <- Evaluation tool
       |    |      ├── inception_metrics.py                  
       |    |      └── sample_and_eval.py
       |    |    
@@ -31,15 +31,15 @@ In this repo, we integrate [Halton-MaskGIT](https://github.com/valeoai/Halton-Ma
       |    |      └── vit.py                          <- Trainer of MaskGIT
       |    |
       |    ├── Scripts/                               <- Shell scripts for training/evaluation.
-      |    |      ├── create_rectified_dataset.sh     <- Rectifie the model 
+      |    |      ├── create_rectified_dataset.sh     <- Rectify the model 
       |    |      ├── finetune_model.sh               <- Finetune the model (from origin MaskGIT)     
       |    |      ├── test_model.sh                   <- Test the model
       |    |      └── train_model.sh                  <- Train the model
       |    |
-      |    ├── compute_tc.py                          <- compute the tc
-      |    ├── download_models.py                     <- download the pretrained models
+      |    ├── compute_tc.py                          <- Compute the TC
+      |    ├── download_models.py                     <- Download the pretrained models
       |    ├── LICENSE.txt                            <- MIT license
-      |    ├── requirements.yaml                      <- help to install env 
+      |    ├── requirements.yaml                      <- Help to install env 
       |    ├── README.md                              
       |    └── main.py                                <- Main
       |
@@ -55,21 +55,21 @@ In this repo, we integrate [Halton-MaskGIT](https://github.com/valeoai/Halton-Ma
       |    |      └── unit_test_attention.py          <- Attention module
       |    |
       |    ├── scripts/                               <- Shell scripts for training/evaluation.
-      |    |      ├── distil_*                        <- Distillation the model    
-      |    |      ├── eval_*                          <- Evaluation the model     
+      |    |      ├── distil_*                        <- Distillate the model    
+      |    |      ├── eval_*                          <- Evaluate the model     
       |    |      ├── gen_ppl_*                       <- Measure the generation perplexity     
       |    |      ├── gen_ppl_tc_*                    <- Measure the generation perplexity and total correlation score
-      |    |      ├── rectifi_*                       <- Rectified the model
+      |    |      ├── rectifi_*                       <- Rectify the model
       |    |      ├── train_*                         <- Train the model 
       |    |      └── zero_shot_*                     
       |    |
       |    ├── algo.py                                <- Main model structures: Algorithms such as DUO, MDLM, AR, SEDD, D3PM, ReDi.
       |    ├── dataloader.py                          <- Dataloader and tokenizer module
-      |    ├── LICENSE                                <- MIT license
+      |    ├── LICENSE                                <- Apache License 2.0
       |    ├── main.py                                <- Main
       |    ├── metrics.py                             <- Metrics module
       |    ├── README.md                              
-      |    ├── requirements.yaml                      <- help to install env 
+      |    ├── requirements.yaml                      <- Help to install env 
       |    ├── trainer_base.py                        <- Boiler plate trainer using pytorch lightning.
       |    └── utils.py                               <- LR scheduler, logging, `fsspec` handling.
 
