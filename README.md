@@ -97,7 +97,7 @@ To get started, you can follow the process in "Usage" part of each [image](image
 ### Text
 
 <p align="center">
-  <img src="figures/openwebtext_fewstep_ppl.jpg"/>
+  <img src="figures/openwebtext_ppl_entropy.jpg"/>
 </p>
 
 ## License
