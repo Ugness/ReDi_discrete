@@ -139,6 +139,8 @@ class ReflowDataset(torch.utils.data.Dataset):
       cache_dir, 'x0.npy'), allow_pickle=True)
     self.xT = np.load(os.path.join(
       cache_dir, 'xT.npy'), allow_pickle=True)
+    self.given_t = np.load(os.path.join(
+      cache_dir, 'ts.npy'), allow_pickle=True) if os.path.exists(os.path.join(cache_dir, 'ts.npy')) else None
 
   def __len__(self):
     return len(self.x0)
@@ -148,6 +150,7 @@ class ReflowDataset(torch.utils.data.Dataset):
       'input_ids': self.x0[idx],
       'attention_mask': np.ones_like(self.x0[idx]),
       'xT': self.xT[idx],
+      'given_t': self.given_t[idx] if self.given_t is not None else 0.0,
     }
   
 class SyntheticTokenizer(

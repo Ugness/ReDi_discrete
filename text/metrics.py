@@ -6,6 +6,8 @@ import torch
 import torch.nn.functional as F
 import torchmetrics
 import transformers
+from transformers import logging
+logging.set_verbosity_error()
 
 # TODO: for tc
 from collections import defaultdict
@@ -257,7 +259,7 @@ class Metrics:
         attn_mask: Attention mask for the eval model
         eval_context_size: Size of the context for the eval model
     """
-    if 'llama2' in self.gen_ppl_eval_model_name_or_path:
+    if 'llama2' in self.gen_ppl_eval_model_name_or_path.lower():
       tokenizer_kwargs = {
         'text_samples': text_samples,
         'return_tensors': 'pt',
@@ -268,6 +270,13 @@ class Metrics:
         'max_length': max_length,
       }
       eval_context_size = 4096
+    elif 'llama3' in self.gen_ppl_eval_model_name_or_path.lower():
+      tokenizer_kwargs = {
+        'text': text_samples,
+        'return_tensors': 'pt',
+        'padding': True,
+      }
+      eval_context_size = 8192
     else:
       tokenizer_kwargs = {
         'return_tensors': 'pt',
@@ -282,7 +291,7 @@ class Metrics:
                              **tokenizer_kwargs)
     attn_mask = samples['attention_mask']
     samples = samples['input_ids']
-    if 'llama2' not in self.gen_ppl_eval_model_name_or_path:
+    if 'llama' not in self.gen_ppl_eval_model_name_or_path.lower():
       attn_mask = attn_mask.to(device)
       samples = samples.to(device)      
     return samples, attn_mask, eval_context_size
@@ -305,46 +314,95 @@ class Metrics:
     device='cuda') -> None:
     
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-    eval_model = transformers.AutoModelForCausalLM.from_pretrained(
-      self.gen_ppl_eval_model_name_or_path).eval()
-    if 'llama2' not in self.gen_ppl_eval_model_name_or_path:
+    if 'llama' not in self.gen_ppl_eval_model_name_or_path:
+      eval_model = transformers.AutoModelForCausalLM.from_pretrained(
+        self.gen_ppl_eval_model_name_or_path).eval()
       eval_model = eval_model.to(device)
-    # Re-tokenize using eval model's tokenizer
-    if retokenize:
-      (samples, attn_mask,
-       eval_context_size) = self._eval_retokenize(
-         text_samples, max_length=max_length, device=device)
+      # Re-tokenize using eval model's tokenizer
+      if retokenize:
+        (samples, attn_mask,
+        eval_context_size) = self._eval_retokenize(
+          text_samples, max_length=max_length, device=device)
+      else:
+        samples = text_samples
+        attn_mask = torch.ones(samples.shape).to(device)
+        eval_context_size = samples.shape[-1]
+      batch_size = min(self.eval_ppl_batch_size,
+                      samples.shape[0])
+      num_batches = samples.shape[0] // batch_size
+      for i in range(num_batches):
+        _samples = torch.split(
+          samples[i * batch_size: (i + 1) * batch_size],
+          eval_context_size,
+          dim=-1)
+        _attn_mask = torch.split(
+          attn_mask[i * batch_size: (i + 1) * batch_size],
+          eval_context_size,
+          dim=-1)
+        for (sample_chunk, attn_mask_chunk) in zip(_samples,
+                                                  _attn_mask):
+          logits = eval_model(sample_chunk.to(device),
+                              attention_mask=attn_mask_chunk.to(device))
+          logits = logits[0].transpose(-1, -2)
+          nlls = F.cross_entropy(logits[..., :-1],
+                                sample_chunk[..., 1:],
+                                reduction='none')
+          first_eos = (
+            sample_chunk
+            == self.tokenizer.eos_token_id).cumsum(-1) == 1
+          token_mask = sample_chunk != self.tokenizer.eos_token_id
+          valid_tokens = first_eos[..., 1:] + token_mask[..., 1:]
+          self.gen_ppl.update(nlls * valid_tokens, valid_tokens)
     else:
-      samples = text_samples
-      attn_mask = torch.ones(samples.shape).to(device)
-      eval_context_size = samples.shape[-1]
-    batch_size = min(self.eval_ppl_batch_size,
-                     samples.shape[0])
-    num_batches = samples.shape[0] // batch_size
-    for i in range(num_batches):
-      _samples = torch.split(
-        samples[i * batch_size: (i + 1) * batch_size],
-        eval_context_size,
-        dim=-1)
-      _attn_mask = torch.split(
-        attn_mask[i * batch_size: (i + 1) * batch_size],
-        eval_context_size,
-        dim=-1)
-      for (sample_chunk, attn_mask_chunk) in zip(_samples,
-                                                 _attn_mask):
-        logits = eval_model(sample_chunk,
-                            attention_mask=attn_mask_chunk)
-        logits = logits[0].transpose(-1, -2)
-        nlls = F.cross_entropy(logits[..., :-1],
-                               sample_chunk[..., 1:],
-                               reduction='none')
-        first_eos = (
-          sample_chunk
-          == self.tokenizer.eos_token_id).cumsum(-1) == 1
-        token_mask = sample_chunk != self.tokenizer.eos_token_id
-        valid_tokens = first_eos[..., 1:] + token_mask[..., 1:]
-        self.gen_ppl.update(nlls * valid_tokens, valid_tokens)
+      eval_model = transformers.AutoModelForCausalLM.from_pretrained(
+        self.gen_ppl_eval_model_name_or_path,
+        torch_dtype=torch.bfloat16).eval()
+      eval_model = eval_model.to(device)
+      # Re-tokenize using eval model's tokenizer
+      tokenizer_llama = transformers.AutoTokenizer.from_pretrained(
+        self.gen_ppl_eval_model_name_or_path)
+      if tokenizer_llama.pad_token is None:
+        tokenizer_llama.pad_token = tokenizer_llama.eos_token
+        tokenizer_llama.pad_token_id = tokenizer_llama.eos_token_id
+      tokenizer_gpt = transformers.AutoTokenizer.from_pretrained(
+        'gpt2')
+      if tokenizer_gpt.pad_token is None:
+        tokenizer_gpt.pad_token = tokenizer_gpt.eos_token
+        tokenizer_gpt.pad_token_id = tokenizer_gpt.eos_token_id
+      num_samples = len(text_samples)
+      batch_size = min(16, num_samples)
+      num_batches = num_samples // batch_size
+
+      with torch.inference_mode():
+        # 1. divide into batches of 16
+        # 2. encode each batch
+        # 3. eval each batch of 16
+        for i in range(num_batches):
+          batch_text_samples = text_samples[i*batch_size:(i+1)*batch_size]
+          encoded_inputs = tokenizer_llama(
+            batch_text_samples,
+            return_tensors="pt", 
+            padding=True,       
+          )
+
+          input_ids = encoded_inputs['input_ids'].to(device)
+          attention_mask = encoded_inputs['attention_mask'].to(device)
+
+          labels = input_ids.clone()
+          labels[labels == tokenizer_llama.pad_token_id] = 50000 
+          labels = labels.to(device)
+
+          outputs = eval_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+          
+          llama_logits = outputs.logits
+
+          logits = llama_logits.transpose(-1, -2)
+          nlls = F.cross_entropy(logits[..., :-1],
+                                labels[..., 1:],
+                                reduction='none')
+          valid_tokens = attention_mask[..., 1:].bool()
+          self.gen_ppl.update(nlls * valid_tokens, valid_tokens)
 
   @torch.no_grad()
-  def record_tc(self, noise, sample):
-    self.tc.update(noise, sample)
+  def record_tc(self, noise_index, sample):
+    self.tc.update(noise_index, sample)

@@ -19,23 +19,28 @@
 export HYDRA_FULL_ERROR=1
 
 checkpoint_path="CKPT_PATH"
+dataset_path="DATASET_PATH"
 ckpt=duo-distilled
+seed=42
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --ckpt) ckpt="$2"; shift ;;
         --checkpoint_path) checkpoint_path="$2"; shift ;;
+        --dataset_path) dataset_path="$2"; shift ;;
+        --seed) seed="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
 done
 
+#torchrun --standalone --nproc_per_node= main.py \
 python -u -m main \
   loader.batch_size=20 \
   loader.eval_batch_size=20 \
   data=openwebtext-split-reflow \
-  +data.cache_dir=CACHE_DIR \
-  wandb.name=duo-owt \
+  data.cache_dir=$dataset_path \
+  wandb.name=ReDi_generation \
   model=small \
   algo=duo \
   model.length=1024 \
@@ -51,4 +56,5 @@ python -u -m main \
   hydra.run.dir=./ \
   +wandb.offline=true \
   eval.checkpoint_path=$checkpoint_path/$ckpt.ckpt \
-  sampling.noise_removal=greedy
+  sampling.noise_removal=greedy \
+  seed=$seed

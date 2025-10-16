@@ -13,6 +13,7 @@ mode: train  # train / ppl_eval / sample_eval
 
 # di4c configs:
 is_di4c: False
+is_di4c_deterministic: True
 
 seed: 1
 
@@ -22,7 +23,7 @@ loader:
   # Note: batch_size and eval_batch_size are **per machine**
   batch_size: ${div_up:${.global_batch_size}, ${eval:${trainer.devices} * ${trainer.num_nodes}}}
   eval_batch_size: ${div_up:${.eval_global_batch_size}, ${eval:${trainer.devices} * ${trainer.num_nodes}}}
-  num_workers: ${eval:"len(__import__('os').sched_getaffinity(0))"}
+  num_workers: 4 # ${eval:"len(__import__('os').sched_getaffinity(0))"}
   pin_memory: True
 
 sampling:
@@ -47,6 +48,8 @@ training:
   change_of_variables: False
   loss_precision: 'bf16'  # bf16, float32, float64
   finetune_path: ''
+  not_sampling_t: False
+  load_ema: False  # load EMA parameters when finetuning
 
 eval:
   checkpoint_path: ''  # Used to evaluate a checkpoint after training.
@@ -54,7 +57,7 @@ eval:
   compute_generative_perplexity: True
   perplexity_batch_size: 8
   compute_perplexity_on_sanity: False
-  gen_ppl_eval_model_name_or_path: gpt2-large  # gpt2-large, meta-llama/Llama-2-7b-hf
+  gen_ppl_eval_model_name_or_path: meta-llama/Llama-3.1-8B  # gpt2-large, meta-llama/Llama-2-7b-hf, meta-llama/Llama-3.1-8B
   generate_samples: True
   generated_samples_path: ${cwd:}/samples.json
 

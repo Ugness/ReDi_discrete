@@ -1,6 +1,7 @@
 train: openwebtext-train
 valid: openwebtext-valid
 tokenizer_name_or_path: gpt2
+cache_dir: /PATH/TO/TRAIN/DATASET
 wrap: True
 streaming: False
 insert_train_eos: True

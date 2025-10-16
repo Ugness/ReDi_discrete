@@ -337,6 +337,8 @@ class DUO_BASE(trainer_base.UniformState):
     assert alpha_t.ndim == 2
     assert x0.ndim == 2
     assert xt.ndim == 2
+    if torch.is_tensor(dalpha_t) and dalpha_t.ndim == 1:
+      dalpha_t = dalpha_t.unsqueeze(-1)
     assert not torch.is_tensor(dalpha_t) or dalpha_t.ndim == 2
     x_reconst = log_x_theta.exp()
     x_bar_theta = self.vocab_size * alpha_t[
@@ -659,6 +661,7 @@ class Rectification(DUO): # Training as duo, without curriculum
     self.use_linear_schedule = config.algo.use_linear_schedule
     self.use_simple_loss = config.algo.use_simple_loss
     self.onestep_mode = config.algo.onestep_mode
+    self.debug = getattr(config.algo, 'debug', False)
   
   def _compute_gumbel_tau_inverse(self):
     return 1e-10
@@ -683,36 +686,43 @@ class Rectification(DUO): # Training as duo, without curriculum
               )
 
   def nll(self, x0, output_tokens,
-          current_accumulation_step=None, train_mode=False, xT=None):
+          current_accumulation_step=None, train_mode=False, xT=None, given_t=None, not_sampling_t=False):
     del output_tokens
-    if not self.use_linear_schedule:
-      t = self._sample_t(x0.shape[0],
-                    current_accumulation_step)
-      assert t.shape[0] == x0.shape[0]
-      if self.T > 0:
-        t = (t * self.T).to(torch.int)
-        t = t / self.T
-        # t \in {1/T, 2/T, ..., 1}
-        t += (1 / self.T)
-      
-      dalpha_t, alpha_t = self.noise(t)
+    if given_t is not None:
+      if not_sampling_t:
+        assert torch.is_tensor(given_t)
+        t = 1-given_t
+      else:
+        t = self._sample_t(x0.shape[0], current_accumulation_step, given_t=1-given_t)
     else:
       t = self._sample_t(x0.shape[0], current_accumulation_step)
-      alpha_t = 1 - t
-      dalpha_t = torch.ones_like(t) * -1.
-    if self.onestep_mode:
-      t = torch.ones_like(t) * 1.
-      alpha_t = 1 - t + 1e-3 # eps.
-      dalpha_t = torch.ones_like(t) * -1.
+    assert t.shape[0] == x0.shape[0]
+    if self.T > 0:
+      assert 0
+    
+    dalpha_t, alpha_t = self.noise(t)
     
     alpha_t = alpha_t.unsqueeze(-1)
     dalpha_t = dalpha_t.unsqueeze(-1)
     assert alpha_t.ndim == 2
     sigma = self._sigma_from_alphat(alpha_t)
 
-    if xT is None:
-      assert not self.training, 'xT should be provided during training'
-      xt = self.q_xt(x0, alpha_t)
+    if given_t is not None and xT is not None:
+      # x0 with alpha_t, xT with (1-alpha_t)
+      random = torch.rand_like(x0, dtype=torch.float32)
+      given_t = given_t.unsqueeze(1)
+      random = given_t + random * (1 - given_t)
+      if self.onestep_mode:
+        random = torch.ones_like(random) + 1 # always larger than alpha_t
+      xt = torch.where(random <= alpha_t, x0, xT)
+    elif xT is None or self.debug:
+      if not self.debug:
+        assert not self.training, 'xT should be provided during training'
+      xT = self.prior_sample(x0.shape[0], x0.shape[1])
+      random = torch.rand_like(x0, dtype=torch.float32)
+      if self.onestep_mode:
+        random = torch.ones_like(random) + 1 # always larger than alpha_t
+      xt = torch.where(random <= alpha_t, x0, xT)
     else:
       # x0 with alpha_t, xT with (1-alpha_t)
       random = torch.rand_like(x0, dtype=torch.float32)

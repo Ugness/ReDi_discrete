@@ -25,7 +25,6 @@ while [[ "$#" -gt 0 ]]; do
         --checkpoint_path) checkpoint_path="$2"; shift ;;
         --temperature) temperature="$2"; shift ;;
         --disable_ema) disable_ema="$2"; shift ;;
-        --top_p) top_p="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -34,19 +33,14 @@ done
 steps=${steps:-1024}
 seed=${seed:-42}
 temperature=${temperature:-1.0}
-top_p=${top_p:-1.0}
-
 disable_ema=${disable_ema:-False}
 
-# for steps in 2 4 8 16 32 1024 64 128 256 512; do
-# for steps in 2 4 8 16 32 1024; do
-# for steps in 1024; do
 echo "  Steps: $steps"
 echo "  Seed: $seed"
 echo "  ckpt: $ckpt"
 
 python -u -m main \
-mode=sample_eval_with_tc \
+    mode=sample_eval \
     seed=$seed \
     loader.batch_size=2 \
     loader.eval_batch_size=8 \
@@ -58,9 +52,7 @@ mode=sample_eval_with_tc \
     sampling.steps=$steps \
     sampling.predictor=ancestral \
     +wandb.offline=true \
-    eval.generated_samples_path=$checkpoint_path/samples_ancestral_greedy/$seed-$steps-ckpt-$ckpt-$temperature-disable-ema-$disable_ema-$top_p.json \
+    eval.generated_samples_path=$checkpoint_path/samples_ancestral_greedy/$seed-$steps-$ckpt-$temperature-disable-ema-$disable_ema-llama3_1.json \
     sampling.noise_removal=greedy \
     eval.disable_ema=$disable_ema \
-    sampling.temperature=$temperature \
-    sampling.p_nucleus=$top_p
-# done
+    sampling.temperature=$temperature

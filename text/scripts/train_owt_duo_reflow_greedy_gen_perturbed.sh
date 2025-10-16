@@ -19,14 +19,18 @@
 export HYDRA_FULL_ERROR=1
 
 checkpoint_path="CKPT_PATH"
-dataset_path="DATASET_PATH"
+owt_path="OWT_PATH"
+dataset_path="SAVE_PATH"
 ckpt=duo-distilled
+seed=42
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --ckpt) ckpt="$2"; shift ;;
         --checkpoint_path) checkpoint_path="$2"; shift ;;
+        --owt_path) owt_path="$2"; shift ;;
         --dataset_path) dataset_path="$2"; shift ;;
+        --seed) seed="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -34,15 +38,26 @@ done
 
 #torchrun --standalone --nproc_per_node= main.py \
 python -u -m main \
-  loader.batch_size=16 \
-  loader.eval_batch_size=16 \
-  data=openwebtext-split-reflow \
-  data.cache_dir=$dataset_path \
-  wandb.name=ReDi_train \
+  loader.batch_size=20 \
+  loader.eval_batch_size=20 \
+  data=openwebtext-split \
+  data.cache_dir=$owt_path \
+  data.save_dir=$dataset_path \
+  wandb.name=ReDi_generation \
   model=small \
-  algo=rectification \
+  algo=duo \
   model.length=1024 \
-  sampling.steps=32 \
+  sampling.steps=1024 \
+  sampling.num_reflow_samples=20000 \
+  algo.gumbel_tau_log10_start=-3.0 \
+  algo.gumbel_tau_log10_end=-3.0 \
   algo.gamma_min=-3.55 \
   algo.gamma_max=-1.85 \
-  training.finetune_path=$checkpoint_path/$ckpt.ckpt
+  algo.curriculum_start=0 \
+  algo.curriculum_end=500000 \
+  mode=generate_reflow_data_with_perturbed_rect \
+  hydra.run.dir=./ \
+  +wandb.offline=true \
+  eval.checkpoint_path=$checkpoint_path/$ckpt.ckpt \
+  sampling.noise_removal=ancestral \
+  seed=$seed

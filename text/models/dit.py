@@ -475,6 +475,12 @@ class DIT(nn.Module, huggingface_hub.PyTorchModelHubMixin):
         self.is_di4c = config.is_di4c
     else:
         self.is_di4c = config.is_di4c = False
+      
+    if "is_di4c_deterministic" in config:
+        self.is_di4c_deterministic = config.is_di4c_deterministic
+    else:
+        self.is_di4c_deterministic = config.is_di4c_deterministic = False
+        
     if self.is_di4c:
         print("Using Di4C")
         # Added for Di4C:
@@ -501,7 +507,10 @@ class DIT(nn.Module, huggingface_hub.PyTorchModelHubMixin):
     rotary_cos_sin = self.rotary_emb(x)
 
     if self.is_di4c: # Di4C
-      z = torch.rand(x.size(0)).to(x.device)
+      if self.is_di4c_deterministic:
+        z = torch.ones(x.size(0)).to(x.device) * 0.5
+      else:
+        z = torch.rand(x.size(0)).to(x.device)
       z_emb = transformer_timestep_embedding(
           z.view(-1) * 1000, self.latent_feature_dim
       )

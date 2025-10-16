@@ -45,4 +45,7 @@ python -u -m main \
   sampling.steps=32 \
   algo.gamma_min=-3.55 \
   algo.gamma_max=-1.85 \
-  training.finetune_path=$checkpoint_path/$ckpt.ckpt
+  training.finetune_path=$checkpoint_path/$ckpt.ckpt \
+  training.not_sampling_t=true \
+  trainer.val_check_interval=null \
+  trainer.max_steps=1000000

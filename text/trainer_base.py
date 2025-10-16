@@ -33,6 +33,7 @@ class LogLinear(torch.nn.Module):
     t = (1 - self.eps) * t
     alpha_t = 1 - t 
     dalpha_t = - (1 - self.eps) + t * 0
+    assert alpha_t.shape == dalpha_t.shape
     return dalpha_t, alpha_t
 
 
@@ -269,7 +270,9 @@ class TrainerBase(L.LightningModule):
                         batch['attention_mask'],
                         current_accumulation_step,
                         train_mode=True,
-                        xT=None if 'xT' not in batch else batch['xT']
+                        xT=None if 'xT' not in batch else batch['xT'],
+                        given_t=batch['given_t'] if 'given_t' in batch else None,
+                        not_sampling_t=self.config.training.not_sampling_t
                         )
     self.metrics.update_train(losses.nlls, losses.prior_loss,
                               losses.num_tokens)
@@ -434,23 +437,25 @@ class TrainerBase(L.LightningModule):
                       'name': 'trainer/lr'}
     return [optimizer], [scheduler_dict]
 
-  def generate_samples(self, num_samples, num_steps, eps):
+  def generate_samples(self, num_samples, num_steps, eps, xT, given_t):
     raise NotImplementedError
 
-  def restore_model_and_sample(self, num_steps, eps=1e-5, duplicate=0):
+  def restore_model_and_sample(self, num_steps, eps=1e-5, duplicate=0, xT=None, given_t=0.0):
     """Generate samples from the model."""
     # Lightning auto-casting is not working in this method for some reason
     # for evaluating the tc
-    if duplicate>0:
+    if duplicate > 0:
+      assert self.config.loader.eval_batch_size % duplicate == 0
       self._eval_mode()
       noise = self.prior_sample(self.config.loader.eval_batch_size // duplicate, self.num_tokens)
       samples = []
-      for i in range(duplicate):
+      for _ in range(duplicate):
         sample = self.generate_samples(
-          num_samples=self.config.loader.eval_batch_size,
+          num_samples=self.config.loader.eval_batch_size // duplicate,
           num_steps=num_steps,
           eps=eps,
-          xT=noise,)
+          xT=noise,
+          given_t=given_t)
         samples.append(sample)
       self._train_mode()
       samples = torch.cat(samples, dim=0)
@@ -460,7 +465,9 @@ class TrainerBase(L.LightningModule):
     samples = self.generate_samples(
       num_samples=self.config.loader.eval_batch_size,
       num_steps=num_steps,
-      eps=eps)
+      eps=eps,
+      xT=xT,
+      given_t=given_t)
     self._train_mode()
     return samples
 
@@ -474,12 +481,12 @@ class TrainerBase(L.LightningModule):
   def _loss(self, x0, valid_tokens,
             current_accumulation_step=None,
             train_mode=False,
-            xT=None):
+            xT=None, given_t=None, not_sampling_t=False):
     (input_tokens, output_tokens,
      valid_tokens) = self._process_model_input(
        x0, valid_tokens)
     loss = self.nll(input_tokens, output_tokens,
-                    current_accumulation_step, train_mode, xT=xT)
+                    current_accumulation_step, train_mode, xT=xT, given_t=given_t, not_sampling_t=not_sampling_t)
     assert loss.ndim == 2
     if self.ignore_bos:
       loss[:, 1:] = loss[:, 1:]
@@ -518,7 +525,7 @@ class Diffusion(TrainerBase):
     assert sigma.ndim == 1, sigma.shape
     return sigma
 
-  def _sample_t(self, n, accum_step):
+  def _sample_t(self, n, accum_step, given_t=None):
     if accum_step is not None:
       # During training
       batch_dim = n
@@ -535,6 +542,11 @@ class Diffusion(TrainerBase):
         accum_step]
       # corner case for the last datapoint
       t = t[:batch_dim]
+    if given_t is not None:
+      if torch.is_tensor(given_t):
+        assert given_t.shape == t.shape or given_t.numel() == 1, \
+            f"Shape mismatch: t={t.shape}, given_t={given_t.shape}"
+      t = t * given_t
     return t
 
   def _sigma_from_alphat(self, alpha_t):
@@ -597,7 +609,7 @@ class Diffusion(TrainerBase):
 
   @torch.no_grad()
   def generate_samples(self, num_samples, num_steps=None,
-                       eps=1e-5, xT=None):
+                       eps=1e-5, xT=None, given_t=0.0):
     """Generate samples from the model."""
     # Lightning auto-casting is not working in this method for some reason
     if num_steps is None:
@@ -607,8 +619,8 @@ class Diffusion(TrainerBase):
     else:
       x = xT
     timesteps = torch.linspace(
-      1, eps, num_steps + 1, device=self.device)
-    dt = (1 - eps) / num_steps
+      1.0 - given_t, eps, num_steps + 1, device=self.device)
+    dt = (1 - given_t - eps) / num_steps
     p_x0_cache = None
 
     cache_count = 0

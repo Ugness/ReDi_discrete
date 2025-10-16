@@ -16,6 +16,7 @@ import algo
 import dataloader
 import utils
 
+import numpy as np
 from datetime import datetime
 
 import uuid
@@ -177,18 +178,15 @@ def _generate_samples_with_tc(diffusion_model, config, logger,
       # and diffusion.compute_generative_perplexity() discards
       # any text after the first EOS token.
     else:
+      assert config.loader.eval_batch_size % config.sampling.duplicate == 0
+      different_in_batch = config.loader.eval_batch_size // config.sampling.duplicate
       samples = model.restore_model_and_sample(
-        num_steps=config.sampling.steps)
-      # samples = model.restore_model_and_sample(
-      #   num_steps=config.sampling.steps, duplicate=8)
+        num_steps=config.sampling.steps, duplicate=config.sampling.duplicate)
       model.metrics.record_entropy(samples)
       text_samples = model.tokenizer.batch_decode(samples)
       model.metrics.record_generative_perplexity(
         text_samples, config.model.length, model.device)
-      samples = model.restore_model_and_sample(
-        num_steps=config.sampling.steps, duplicate=8)
-      # import ipdb; ipdb.set_trace()
-      model.metrics.record_tc([i for _ in range(8)], samples)
+      model.metrics.record_tc([i*different_in_batch + j for _ in range(config.sampling.duplicate) for j in range(different_in_batch)], samples)
       all_samples.extend(list(text_samples))
   
   print("generation end: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -208,9 +206,9 @@ def _generate_samples_with_tc(diffusion_model, config, logger,
   with fsspec.open(samples_path, 'w') as f:
     json.dump({'generative_ppl': generative_ppl,
                'entropy': entropy,
-                'avg_tc': avg_tc,
-                'avg_joints': avg_joints,
-                'avg_marginals': avg_marginals,
+               'avg_tc': avg_tc,
+               'avg_joints': avg_joints,
+               'avg_marginals': avg_marginals,
                'generated_seqs': all_samples}, f, indent=4)
   print('Samples saved at:', samples_path)
 
@@ -274,6 +272,72 @@ def _eval_ppl(diffusion_model, config, logger, tokenizer):
     config, tokenizer, skip_train=True, valid_seed=config.seed)
   trainer.validate(model, valid_ds)
 
+@torch.inference_mode()
+def generate_reflow_dataset_with_perturbed_rect(diffusion_model, config, logger, tokenizer):
+  logger.info('Generating samples.')
+  model = _load_from_checkpoint(
+    diffusion_model=diffusion_model,
+    config=config,
+    tokenizer=tokenizer)
+  if config.eval.disable_ema:
+    logger.info('Disabling EMA.')
+    model.ema = None
+
+  train_ds, _ = dataloader.get_dataloaders(
+    config, tokenizer, skip_valid=True)
+
+  # i is given by random sequence of train_ds's N
+  shuffled_indices = np.random.permutation(len(train_ds.dataset))
+
+  eval_batch_size = config.loader.eval_batch_size
+  generate_samples = config.sampling.num_reflow_samples
+
+  x0s = []
+  xTs = []
+  ts = []
+
+  print("generation start: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+  for j in range(generate_samples // eval_batch_size):
+    if config.sampling.semi_ar:
+      raise NotImplementedError("Semi-AR sampling is not implemented. Please use standard sampling.")
+    else:
+      assert eval_batch_size == 1
+      x0 = train_ds.dataset[shuffled_indices[j*eval_batch_size:(j+1)*eval_batch_size]]['input_ids']
+      x0 = torch.from_numpy(x0).to(model.device)
+      x1 = torch.randint(0, 50258, x0.shape, device=model.device, dtype=x0.dtype)
+      rand_t = torch.randint(0, x0.shape[1], (1, ), device=model.device).float().item() / x0.shape[1]
+      num_step = max(int(config.sampling.steps * (1 - rand_t)), 1)
+      # random interpolate between x1 and x0
+      xt = torch.where(rand_t > torch.rand(x1.shape, device=model.device), x0, x1) # =y_given_t where y0=noise, y1=data
+
+      samples = model.restore_model_and_sample(
+        num_steps=num_step, xT=xt.clone(), given_t=rand_t)
+      x0s.append(samples.clone())
+      xTs.append(xt.clone())
+      ts.append(rand_t)
+    if j % 500 == 0:
+      print(f"Generated {(j+1) * eval_batch_size} samples")
+  x0s = torch.cat(x0s, dim=0)
+  xTs = torch.cat(xTs, dim=0)
+  ts = torch.tensor(ts, device=model.device)
+
+  print("generation end: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+  x0s = x0s.cpu().numpy()
+  xTs = xTs.cpu().numpy()
+  ts = ts.cpu().numpy()
+
+  save_path = config.data.save_dir
+  if not os.path.exists(save_path):
+    os.makedirs(save_path)
+
+  xT_path = os.path.join(save_path, 'xT.npy')
+  x0_path = os.path.join(save_path, 'x0.npy')
+  ts_path = os.path.join(save_path, 'ts.npy')
+
+  np.save(x0_path, x0s)
+  np.save(xT_path, xTs)
+  np.save(ts_path, ts)
 
 def _train(diffusion_model, config, logger, tokenizer):
   logger.info('Starting Training.')
@@ -358,12 +422,14 @@ def main(config):
             'logger': logger}
   if config.mode == 'sample_eval':
     _generate_samples(**kwargs)
+  elif config.mode == 'sample_eval_with_tc':
+    _generate_samples_with_tc(**kwargs)
   elif config.mode == 'ppl_eval':
     _eval_ppl(**kwargs)
   elif config.mode == 'generate_reflow_data':
     generate_reflow_dataset(diffusion_model, config, logger, tokenizer)
-  elif config.mode == 'sample_eval_with_tc':
-    _generate_samples_with_tc(**kwargs)
+  elif config.mode == 'generate_reflow_data_with_perturbed_rect':
+    generate_reflow_dataset_with_perturbed_rect(**kwargs)
   else:
     _train(**kwargs)
 
