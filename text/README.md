@@ -2,7 +2,7 @@
 
 In this project, we use OpenWebText dataset.
 
-We used A6000 8 gpus for training and inference.
+We used H100 4 gpus for training and inference.
 
 ## Usage
 
@@ -26,8 +26,9 @@ To get started with this project, follow these steps:
 
 3. Download OpenWebText dataset
     ```bash
-    # The training program automatically downloads the OWT dataset onto your local machine.
+    # The training code automatically downloads the OWT dataset onto your local machine.
     ```
+
 4. Use ReDi method
     ```bash
     # Train
