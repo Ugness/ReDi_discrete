@@ -1,4 +1,4 @@
-# ReDi: Rectified Discrete Flow
+# ReDi: Rectified Discrete Flow (NeurIPS 2025)
 
 <p align="left">
 <a href="https://arxiv.org/abs/2507.15897" alt="arXiv">
