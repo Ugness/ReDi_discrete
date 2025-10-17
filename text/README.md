@@ -4,7 +4,7 @@ In this project, we use OpenWebText dataset.
 
 We used H100 4 gpus for training and inference.
 
-Single rectification iteration takes 3 hours on our machine.
+Training for single rectification iteration takes 3 hours on our machine.
 
 ## Usage
 
