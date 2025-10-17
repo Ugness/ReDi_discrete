@@ -1,11 +1,16 @@
 # ReDi: Rectified Discrete Flow
 
+<p align="left">
+<a href="https://arxiv.org/abs/2507.15897" alt="arXiv">
+    <img src="https://img.shields.io/badge/arXiv-2507.15897-b31b1b.svg?style=flat" /></a>
+</p>
+
 By [Jaehoon Yoo](https://sites.google.com/view/jaehoon-yoo/), [Wonjung Kim](https://github.com/wjhjkim), [Seunghoon Hong](https://maga33.github.io/)
 
 This repository contains the official implementation of the paper:
 [ReDi: Rectified Discrete Flow (arXiv, 2025)](https://arxiv.org/abs/2507.15897)
 
-We introduce *ReDi*, a novel iterative mothod that reduces factorization error by rectifying the coupling between source and target distribution.
+We introduce *ReDi*, a novel iterative method that reduces factorization error by rectifying the coupling between source and target distribution.
 
 In this repo, we integrate [Halton-MaskGIT](https://github.com/valeoai/Halton-MaskGIT/tree/v1.0) and [DUO](https://github.com/s-sahoo/duo) as the structural foundation for our implementation, which involves both image and text models to demonstrate the ReDi method.
 
@@ -74,7 +79,7 @@ In this repo, we integrate [Halton-MaskGIT](https://github.com/valeoai/Halton-Ma
       |    └── utils.py                               <- LR scheduler, logging, `fsspec` handling.
 
 ## Usage
-To get started, you can follow the process in "Usage" part of each [image](image/README.md) and [text](text/README.md) folder's README.
+To get started, you can follow the process in "Usage" part of each [image](image/README.md) and [text](text/README.md) README.
 
 ## Experiment score
 ### Image
